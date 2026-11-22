@@ -179,7 +179,12 @@ $<HTMLInputElement>('upload').onchange = async (e) => {
 async function upright(source: Blob | ImageBitmap, region?: { x: number; y: number; width: number; height: number }) {
   const bmp = source instanceof Blob ? await createImageBitmap(source, { imageOrientation: 'from-image' }) : source;
   const r = region ?? { x: 0, y: 0, width: bmp.width, height: bmp.height };
-  const c = new OffscreenCanvas(Math.round(r.width), Math.round(r.height));
+  // A modern phone photo can be 12-48 megapixels. Keep the photo-analysis
+  // canvas small so Safari does not allocate multiple enormous RGBA buffers
+  // on top of the face-swap models. Cropped face images preserve their
+  // coordinate space for the user-drawn face selection.
+  const ratio = region ? 1 : Math.min(1, 1600 / Math.max(r.width, r.height));
+  const c = new OffscreenCanvas(Math.max(1, Math.round(r.width * ratio)), Math.max(1, Math.round(r.height * ratio)));
   c.getContext('2d')!.drawImage(bmp, r.x, r.y, r.width, r.height, 0, 0, c.width, c.height);
   if (source instanceof Blob) bmp.close();
   return URL.createObjectURL(await c.convertToBlob({ type: 'image/jpeg', quality: 0.95 }));
