@@ -120,5 +120,14 @@
     try { await navigator.clipboard.writeText(d); $('fm-diagnostic').textContent='コピーしました'; }
     catch { prompt('診断情報をコピー',d); }
   };
+  // A reload after the model reaches 100% may be a Safari process kill.
+  // Read the persisted startup marker; the engine clears it on successful startup.
+  try {
+    const stage = localStorage.getItem('facemotion:ai-start-stage');
+    if (stage) {
+      $('fm-status').textContent = '前回、AI起動中にページが再読み込みされた可能性があります。直前の段階: ' + stage;
+      $('fm-photo-state').textContent = '前回のAI起動は完了していません。Safariのメモリ制限が考えられます。';
+    }
+  } catch { /* storage unavailable */ }
   update();
 })();
