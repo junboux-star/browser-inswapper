@@ -100,7 +100,12 @@
     $('fm-scan-state').textContent = !$('mapping').hidden ? '人物を検出済み。下の詳細設定で交換する顔を確認してください。' : fileName ? '動画を解析しています。' : '動画を選ぶと利用できます';
     const done = !$('videoDownload').hidden;
     $('fm-save').hidden = !done;
-    $('fm-status').textContent = done ? '変換完了。完成した動画を保存できます。' : ($('videoStatus').textContent.trim() || '人物の検出と割り当てを待っています。');
+    let previousCrash = '';
+    try {
+      const stage = localStorage.getItem('facemotion:ai-start-stage');
+      if (stage) previousCrash = '前回AI初期化が完了せず再読み込みされた可能性があります。直前: ' + stage + '\\n';
+    } catch { /* storage unavailable */ }
+    $('fm-status').textContent = done ? '変換完了。完成した動画を保存できます。' : previousCrash + ($('videoStatus').textContent.trim() || '人物の検出と割り当てを待っています。');
     const engineText = $('status')?.textContent?.trim() || 'AIを起動していません';
     const errText = $('log')?.textContent?.trim() || '';
     const bar = $('progress');
