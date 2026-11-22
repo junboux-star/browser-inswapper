@@ -43,7 +43,7 @@
     '<span class="fm-tag">非商用無料</span><span class="fm-tag">最大60秒</span><span class="fm-tag">音声を保持</span>';
   const flow = document.createElement('div');
   flow.innerHTML =
-    '<div class="fm-box"><h2>① 交換する顔写真</h2><p>明るい正面写真を選び、顔を確認します。</p><button class="fm-btn" id="fm-photo">顔写真を選ぶ</button><div class="fm-meta" id="fm-photo-state">未登録</div></div>' +
+    '<div class="fm-box"><h2>① 交換する顔写真</h2><p>明るい正面写真を選び、顔を確認します。</p><button class="fm-btn" id="fm-photo">顔写真を選ぶ</button><div class="fm-meta" id="fm-photo-state">未登録</div><div class="fm-status" id="fm-engine" aria-live="polite">AIの読み込み待ち</div></div>' +
     '<div class="fm-box"><h2>② 元の動画</h2><p>最初は5秒の短い動画で試すのがおすすめ。</p><button class="fm-btn" id="fm-video">動画を選ぶ</button><div class="fm-meta" id="fm-video-state">未選択</div></div>' +
     '<div class="fm-box"><h2>③ 人物を検出</h2><p>人物ごとに交換する顔を指定します。</p><button class="fm-btn" id="fm-scan" disabled>動画内の人物を検出</button><div class="fm-meta" id="fm-scan-state">動画を選ぶと利用できます</div></div>' +
     '<div class="fm-box"><h2>④ AIで交換・保存</h2><p>顔の割り当てが完了したら開始できます。</p><button class="fm-btn fm-primary" id="fm-run" disabled>顔交換を開始する</button><div class="fm-status" id="fm-status" aria-live="polite">待機中</div><button class="fm-btn" id="fm-save" hidden style="margin-top:10px">完成動画を保存する</button></div>' +
@@ -101,14 +101,19 @@
     const done = !$('videoDownload').hidden;
     $('fm-save').hidden = !done;
     $('fm-status').textContent = done ? '変換完了。完成した動画を保存できます。' : ($('videoStatus').textContent.trim() || '人物の検出と割り当てを待っています。');
+    const engineText = $('status')?.textContent?.trim() || 'AIを起動していません';
+    const errText = $('log')?.textContent?.trim() || '';
+    const bar = $('progress');
+    const percent = bar && !bar.hidden && bar.max > 0 ? ' / ' + Math.round(bar.value / bar.max * 100) + '%' : '';
+    $('fm-engine').textContent = 'AIの状態：' + engineText + percent + (errText ? '\n詳細：' + errText : '');
     localizeMapping();
   }
-  for (const id of ['videoGo','findPeople','mapping','videoDownload','videoStatus','trimmer','mapList']) {
+  for (const id of ['videoGo','findPeople','mapping','videoDownload','videoStatus','trimmer','mapList','status','log','progress']) {
     new MutationObserver(update).observe($(id),{attributes:true,childList:true,characterData:true,subtree:true});
   }
   new MutationObserver(update).observe(document.querySelector('.faces'),{childList:true});
   $('fm-diagnostic').onclick = async () => {
-    const d = ['FaceMotion AI 診断','UserAgent: '+navigator.userAgent,'HTTPS: '+isSecureContext,
+    const d = ['FaceMotion AI 診断','AI: '+($('status')?.textContent||''),'UserAgent: '+navigator.userAgent,'HTTPS: '+isSecureContext,
       'WebGPU: '+('gpu' in navigator),'VideoEncoder: '+('VideoEncoder' in window),
       'File: '+(fileName||'none'),'Status: '+$('videoStatus').textContent,
       'Error: '+($('log')?.textContent||'')].join('\n');
