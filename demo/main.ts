@@ -63,24 +63,40 @@ async function ensureEngine() {
     log.textContent = 'This browser has no WebGPU, and on the CPU the face swap needs more memory than a phone tab gets. Update to iOS 26 / Safari 26, or use Chrome on Android 12+.';
     return null;
   }
-  status.textContent = 'Loading models…';
+  // On iOS the first GPU model compile can exceed Safari's tab memory budget,
+  // especially when the app starts a segmenter and multiple benchmark sessions.
+  // Prefer one fp16 WebGPU session and defer optional occlusion on phones.
+  const phone = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const selectedBackend = (phone && backendSel.value === 'auto' && caps.webgpu.available)
+    ? 'webgpu' : backendSel.value as Backend | 'auto';
+  const stageKey = 'facemotion:ai-start-stage';
+  try { localStorage.setItem(stageKey, 'AIモデルの準備を開始'); } catch { /* storage blocked */ }
+  status.textContent = 'AIモデルを準備中…';
   progress.hidden = false;
   try {
     swap = await createFaceSwap({
       models,
-      backend: backendSel.value as Backend | 'auto',
+      backend: selectedBackend,
+      occlusion: !phone,
+      tracking: phone ? 'CPU' : 'GPU',
       onProgress: (p) => {
         progress.max = p.total || 1; progress.value = p.loaded;
-        status.textContent = p.loaded < p.total || !swap ? `Loading ${p.model}… ${Math.round(p.loaded / 1e6)} MB` : `Ready on ${swap.backend.toUpperCase()}`;
+        const complete = !!p.total && p.loaded >= p.total;
+        status.textContent = complete
+          ? `${p.model}: 取得100%。続けてAIを初期化します…`
+          : `Loading ${p.model}… ${Math.round(p.loaded / 1e6)} MB`;
+        if (complete) { try { localStorage.setItem(stageKey, `${p.model} 100% / AI初期化待ち`); } catch { /* no storage */ } }
       },
       onStats: (s) => { stats = s; status.textContent = `${s.backend.toUpperCase()}: ${Math.round(s.fps)} fps, ${Math.round(1000 / Math.max(s.inferMs, 1))} swaps/s (${Math.round(s.inferMs)} ms), ${s.latencyMs} ms latency`; },
       onLog: (m) => { logs.push(m); console.info('[faceswap]', m); },
     });
   } catch (err) {
-    status.textContent = 'Couldn’t start';
+    status.textContent = 'AIの起動に失敗しました';
     log.textContent = (err as Error).message;
+    try { localStorage.removeItem(stageKey); } catch { /* no storage */ }
     return null;
   } finally { progress.hidden = true; }
+  try { localStorage.removeItem(stageKey); } catch { /* no storage */ }
   status.textContent = `Ready on ${swap.backend.toUpperCase()}`;
   if (identity) await choose(identity, 0);
   return swap;
