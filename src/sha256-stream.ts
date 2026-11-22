@@ -20,10 +20,10 @@ export class Sha256Stream {
   private totalBytes = 0;
 
   private compress() {
-    const w = this.schedule, b = this.block;
+    const w = this.schedule, bytes = this.block;
     for (let i = 0; i < 16; i++) {
       const j = i * 4;
-      w[i] = ((b[j] << 24) | (b[j + 1] << 16) | (b[j + 2] << 8) | b[j + 3]) >>> 0;
+      w[i] = ((bytes[j] << 24) | (bytes[j + 1] << 16) | (bytes[j + 2] << 8) | bytes[j + 3]) >>> 0;
     }
     for (let i = 16; i < 64; i++) {
       const x = w[i - 15], y = w[i - 2];
