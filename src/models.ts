@@ -1,3 +1,4 @@
+import { Sha256Stream } from './sha256-stream.ts';
 // Model files: fetched once with progress, kept in the browser's Cache Storage, checked against a SHA-256
 // before use. No weights ship with this package; the app says where they live (see README: licences).
 
@@ -39,10 +40,8 @@ export type Progress = { model: string; loaded: number; total: number };
 // ponytail: pre-rename name kept so returning visitors don't download the models again.
 const CACHE = 'heisenbert-faceswap-models-v1';
 
-async function sha256(buf: ArrayBuffer) {
-  const d = await crypto.subtle.digest('SHA-256', buf);
-  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
+// Large-model integrity is verified while streaming. Never create a second
+// 280 MB buffer just to calculate SHA-256 on memory-constrained mobile Safari.
 
 /** Returns the model bytes: from the cache when present (and matching), otherwise downloaded and cached. */
 export async function loadModel(name: string, spec: ModelSpec, onProgress?: (p: Progress) => void, signal?: AbortSignal): Promise<ArrayBuffer> {
@@ -60,6 +59,7 @@ export async function loadModel(name: string, spec: ModelSpec, onProgress?: (p: 
   // Into one buffer as it arrives, not chunks plus a joined copy plus a copy for the cache: phones kill a tab
   // that holds three copies of a 280 MB model at once (it looks like the page reloading by itself).
   const reader = res.body.getReader();
+  const hash = spec.sha256 ? new Sha256Stream() : null;
   let bytes = new Uint8Array(total);
   let loaded = 0;
   for (;;) {
@@ -69,14 +69,22 @@ export async function loadModel(name: string, spec: ModelSpec, onProgress?: (p: 
       const grown = new Uint8Array(Math.max(loaded + value.byteLength, bytes.byteLength * 2));
       grown.set(bytes.subarray(0, loaded)); bytes = grown;
     }
+    hash?.update(value);
     bytes.set(value, loaded);
     loaded += value.byteLength;
     onProgress?.({ model: name, loaded, total: Math.max(total, loaded) });
   }
   if (loaded < bytes.byteLength) bytes = bytes.slice(0, loaded);
-  if (spec.sha256 && (await sha256(bytes.buffer)) !== spec.sha256) throw new Error(`${name} didn’t match its fingerprint; not used.`);
-  // Awaited before returning: the caller hands the buffer to a worker, which empties it here.
-  await cache?.put(key, new Response(bytes, { headers: { 'content-type': 'application/octet-stream' } })).catch(() => {});
+  // Hash computation has already finished by the time the download reaches 100%.
+  // This avoids WebCrypto holding a second copy at the moment the UI reports 100%.
+  if (spec.sha256 && hash?.hex() !== spec.sha256) throw new Error(`${name} didn’t match its fingerprint; not used.`);
+  // Cache Storage can duplicate the entire model's bytes while writing. Avoid
+  // caching large models on iOS rather than risking Safari killing the tab.
+  // Small MediaPipe assets are still cached; desktop retains the existing behavior.
+  const ios = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  if (!ios || bytes.byteLength <= 32 * 1024 * 1024) {
+    await cache?.put(key, new Response(bytes, { headers: { 'content-type': 'application/octet-stream' } })).catch(() => {});
+  }
   return bytes.buffer;
 }
 
